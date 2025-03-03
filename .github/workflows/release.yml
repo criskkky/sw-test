@@ -28,11 +28,6 @@ jobs:
       - name: Set PLUGIN_NAME
         run: |
           REPO_NAME=${{ github.event.repository.name }}
-          if [[ $REPO_NAME == sw-* ]]; then
-            PLUGIN_NAME=${REPO_NAME#sw-}
-          else
-            PLUGIN_NAME=$REPO_NAME
-          fi
           echo "PLUGIN_NAME=$PLUGIN_NAME" >> $GITHUB_ENV
 
       - name: Check version and set variables
