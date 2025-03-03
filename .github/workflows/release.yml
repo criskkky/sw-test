@@ -39,36 +39,36 @@ jobs:
           # Search for core.lua recursively from the root
           CORE_FILE=$(find . -type f -name "core.lua" | head -n 1 || true)
           if [ -z "$CORE_FILE" ]; then
-            echo "⚠️ Skipping: No 'core.lua' file found in the repository."
+            echo "ℹ️ Skipping: No 'core.lua' file found in the repository."
             echo "CREATE_RELEASE=false" >> $GITHUB_ENV
-            exit 2  # Cambiado de exit 0 a exit 2
+            exit 0
           fi
           echo "✅ Found: 'core.lua' file located at $CORE_FILE"
 
           # Check if the diff affects GetPluginVersion()
           CHANGED_IN_FUNCTION=$(git diff HEAD^ HEAD "$CORE_FILE" | grep -A 10 'function GetPluginVersion()' | grep -E '^\+.*return "[^"]*"' || true)
           if [ -z "$CHANGED_IN_FUNCTION" ]; then
-            echo "⚠️ Skipping: Changes in $CORE_FILE do not affect the version in GetPluginVersion(). Releases are only created when the 'return' changes."
+            echo "ℹ️ Skipping: Changes in $CORE_FILE do not affect the version in GetPluginVersion(). Releases are only created when the 'return' changes."
             echo "CREATE_RELEASE=false" >> $GITHUB_ENV
-            exit 2  # Cambiado de exit 0 a exit 2
+            exit 0
           fi
           echo "✅ Detected: Change in the 'return' line of GetPluginVersion() in $CORE_FILE"
 
           # Extract the version from GetPluginVersion()
           NEW_VERSION=$(grep -A 10 'function GetPluginVersion()' "$CORE_FILE" | grep 'return "[^"]*"' | sed 's/.*return "\([^"]*\)".*/\1/' | head -n 1 || true)
           if [ -z "$NEW_VERSION" ]; then
-            echo "⚠️ Skipping: No valid version found in GetPluginVersion() in $CORE_FILE (expected: return \"...\"). Check the function syntax."
+            echo "ℹ️ Skipping: No valid version found in GetPluginVersion() in $CORE_FILE (expected: return \"...\"). Check the function syntax."
             echo "CREATE_RELEASE=false" >> $GITHUB_ENV
-            exit 2  # Cambiado de exit 0 a exit 2
+            exit 0
           fi
           echo "✅ Version: Extracted '$NEW_VERSION' from GetPluginVersion()"
 
           # Get all releases and check if the version already exists
           RELEASES=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases" | jq -r '.[] | .tag_name' || true)
           if echo "$RELEASES" | grep -q "^$NEW_VERSION$"; then
-            echo "⚠️ Skipping: Version '$NEW_VERSION' already exists as a release in ${{ github.repository }}."
+            echo "ℹ️ Skipping: Version '$NEW_VERSION' already exists as a release in ${{ github.repository }}."
             echo "CREATE_RELEASE=false" >> $GITHUB_ENV
-            exit 2  # Cambiado de exit 0 a exit 2
+            exit 0
           fi
           echo "✅ Check: Version '$NEW_VERSION' does not exist as a prior release"
 
@@ -103,12 +103,11 @@ jobs:
             echo "✅ Proceeding: Creating release for version '$VERSION' (tag: '$TAG_VERSION')"
             echo "CREATE_RELEASE=true" >> $GITHUB_ENV
           else
-            echo "⚠️ Skipping: Version '$VERSION' is identical to the latest tag '$LATEST_TAG'"
+            echo "ℹ️ Skipping: Version '$VERSION' is identical to the latest tag '$LATEST_TAG'"
             echo "CREATE_RELEASE=false" >> $GITHUB_ENV
-            exit 2  # Cambiado de exit 0 a exit 2
           fi
         shell: /usr/bin/bash -e {0}
-        
+
       - name: Create ZIP file
         if: env.CREATE_RELEASE == 'true'
         run: |
