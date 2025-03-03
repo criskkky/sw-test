@@ -6,6 +6,8 @@ on:
   push:
     paths:
       - '**/core.lua'
+      - '**/core.js'
+      - '**/core.ts'
 
 env:
   SOURCE_DIR: ./src
@@ -39,7 +41,7 @@ jobs:
           set +e
           
           # Search for core.lua recursively from the root
-          CORE_FILE=$(find . -type f -name "core.lua" | head -n 1 || true)
+          CORE_FILE=$(find . -type f \( -name "core.lua" -o -name "core.js" -o -name "core.ts" \) | head -n 1 || true)
           if [ -z "$CORE_FILE" ]; then
             echo "ℹ️ Skipping: No 'core.lua' file found in the repository."
             echo "CREATE_RELEASE=false" >> $GITHUB_ENV
@@ -48,6 +50,7 @@ jobs:
           echo "✅ Found: 'core.lua' file located at $CORE_FILE"
 
           # Check if the diff affects GetPluginVersion()
+          
           CHANGED_IN_FUNCTION=$(git diff HEAD^ HEAD "$CORE_FILE" | grep -A 10 'function GetPluginVersion()' | grep -E '^\+.*return "[^"]*"' || true)
           if [ -z "$CHANGED_IN_FUNCTION" ]; then
             echo "ℹ️ Skipping: Changes in $CORE_FILE do not affect the version in GetPluginVersion(). Releases are only created when the 'return' changes."
