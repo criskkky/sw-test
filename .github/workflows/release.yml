@@ -28,6 +28,7 @@ jobs:
       - name: Set PLUGIN_NAME
         run: |
           REPO_NAME=${{ github.event.repository.name }}
+          PLUGIN_NAME=$REPO_NAME
           echo "PLUGIN_NAME=$PLUGIN_NAME" >> $GITHUB_ENV
 
       - name: Check version and set variables
