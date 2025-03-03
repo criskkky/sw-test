@@ -7,7 +7,7 @@ function GetPluginVersion()
 end
 
 function GetPluginName()
-	return "Test1"
+	return "Test"
 end
 
 function GetPluginWebsite()
