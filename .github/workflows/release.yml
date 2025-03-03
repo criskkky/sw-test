@@ -146,7 +146,7 @@ jobs:
             **How to install 📦**
             Extract the compressed file and place the folder(s) in `${{ env.INSTALL_PATH }}`
 
-            **Support me ❤️**
+            **Leave feedback ❤️**
             Please consider leaving a ⭐ if it's helpful to your server.
           draft: false
           prerelease: false
