@@ -33,88 +33,98 @@ jobs:
 
       - name: Check version and set variables
         run: |
-          # Buscamos core.lua recursivamente desde la raíz
-          CORE_FILE=$(find . -type f -name "core.lua" | head -n 1)
+          # Disable set -e temporarily to handle errors manually
+          set +e
           
-          # Si no se encuentra core.lua, no creamos release
+          # Search for core.lua recursively from the root
+          CORE_FILE=$(find . -type f -name "core.lua" | head -n 1 || true)
           if [ -z "$CORE_FILE" ]; then
-            echo "Warning: No se encontró core.lua en el repositorio, no se creará release"
+            echo "ℹ️ Skipping: No 'core.lua' file found in the repository."
             echo "CREATE_RELEASE=false" >> $GITHUB_ENV
             exit 0
           fi
-          
-          # Verificamos si el diff afecta GetPluginVersion()
-          CHANGED_IN_FUNCTION=$(git diff HEAD^ HEAD "$CORE_FILE" | grep -A 10 'function GetPluginVersion()' | grep -E '^\+.*return "[^"]*"')
-          
-          if [ -z "$CHANGED_IN_FUNCTION" ]; then
-            echo "Warning: No se detectaron cambios en GetPluginVersion() en $CORE_FILE, no se creará release"
-            echo "CREATE_RELEASE=false" >> $GITHUB_ENV
-            exit 0
-          fi
-          
-          # Extraemos la versión de GetPluginVersion()
-          NEW_VERSION=$(grep -A 10 'function GetPluginVersion()' "$CORE_FILE" | grep 'return "[^"]*"' | sed 's/.*return "\([^"]*\)".*/\1/' | head -n 1)
-          
-          # Si no se encuentra una versión válida, no creamos release
-          if [ -z "$NEW_VERSION" ]; then
-            echo "Warning: No se encontró una versión válida en GetPluginVersion() en $CORE_FILE, no se creará release"
-            echo "CREATE_RELEASE=false" >> $GITHUB_ENV
-            exit 0
-          fi
+          echo "✅ Found: 'core.lua' file located at $CORE_FILE"
 
-          # Obtenemos todos los releases y si la versión ya existe, no creamos release
+          # Check if the diff affects GetPluginVersion()
+          CHANGED_IN_FUNCTION=$(git diff HEAD^ HEAD "$CORE_FILE" | grep -A 10 'function GetPluginVersion()' | grep -E '^\+.*return "[^"]*"' || true)
+          if [ -z "$CHANGED_IN_FUNCTION" ]; then
+            echo "ℹ️ Skipping: Changes in $CORE_FILE do not affect the version in GetPluginVersion(). Releases are only created when the 'return' changes."
+            echo "CREATE_RELEASE=false" >> $GITHUB_ENV
+            exit 0
+          fi
+          echo "✅ Detected: Change in the 'return' line of GetPluginVersion() in $CORE_FILE"
+
+          # Extract the version from GetPluginVersion()
+          NEW_VERSION=$(grep -A 10 'function GetPluginVersion()' "$CORE_FILE" | grep 'return "[^"]*"' | sed 's/.*return "\([^"]*\)".*/\1/' | head -n 1 || true)
+          if [ -z "$NEW_VERSION" ]; then
+            echo "ℹ️ Skipping: No valid version found in GetPluginVersion() in $CORE_FILE (expected: return \"...\"). Check the function syntax."
+            echo "CREATE_RELEASE=false" >> $GITHUB_ENV
+            exit 0
+          fi
+          echo "✅ Version: Extracted '$NEW_VERSION' from GetPluginVersion()"
+
+          # Get all releases and check if the version already exists
           RELEASES=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" "https://api.github.com/repos/${{ github.repository }}/releases" | jq -r '.[] | .tag_name' || true)
           if echo "$RELEASES" | grep -q "^$NEW_VERSION$"; then
-            echo "Warning: La versión $NEW_VERSION ya existe, no se creará release"
+            echo "ℹ️ Skipping: Version '$NEW_VERSION' already exists as a release in ${{ github.repository }}."
             echo "CREATE_RELEASE=false" >> $GITHUB_ENV
             exit 0
           fi
-          
-          # Limpiamos la versión para nombres de archivos (sin espacios, caracteres especiales limitados)
+          echo "✅ Check: Version '$NEW_VERSION' does not exist as a prior release"
+
+          # Clean the version for file names (no spaces, limited special characters)
           VERSION=$(echo "$NEW_VERSION" | sed 's/[^a-zA-Z0-9._-]/-/g')
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          
-          # Normalizamos para el tag añadiendo 'v' si no la tiene
+          echo "ℹ️ Info: Cleaned version for files: '$VERSION'"
+
+          # Normalize the tag by adding 'v' if not present
           if [[ "$NEW_VERSION" =~ ^v ]]; then
             TAG_VERSION="$NEW_VERSION"
           else
             TAG_VERSION="v$NEW_VERSION"
           fi
-          # Limpiamos el tag para que sea válido en GitHub
           TAG_VERSION=$(echo "$TAG_VERSION" | sed 's/[^a-zA-Z0-9._-]/-/g')
           echo "TAG_VERSION=$TAG_VERSION" >> $GITHUB_ENV
-          
-          # Obtenemos el último tag
+          echo "ℹ️ Info: Normalized tag for GitHub: '$TAG_VERSION'"
+
+          # Get the latest tag
           LATEST_TAG=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "")
           echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
-          
-          # Extraemos la versión del último tag, sin 'v' para comparación
           if [ -n "$LATEST_TAG" ]; then
             LATEST_VERSION=${LATEST_TAG#v}
+            echo "ℹ️ Info: Latest tag found: '$LATEST_TAG' (version: '$LATEST_VERSION')"
           else
             LATEST_VERSION=""
+            echo "ℹ️ Info: No previous tags found in the repository"
           fi
-          
-          # Decidimos si crear el release comparando la versión sin 'v'
+
+          # Decide whether to create the release
           if [ -z "$LATEST_VERSION" ] || [ "$LATEST_VERSION" != "$VERSION" ]; then
+            echo "✅ Proceeding: Creating release for version '$VERSION' (tag: '$TAG_VERSION')"
             echo "CREATE_RELEASE=true" >> $GITHUB_ENV
           else
+            echo "ℹ️ Skipping: Version '$VERSION' is identical to the latest tag '$LATEST_TAG'"
             echo "CREATE_RELEASE=false" >> $GITHUB_ENV
           fi
+        shell: /usr/bin/bash -e {0}
 
       - name: Create ZIP file
         if: env.CREATE_RELEASE == 'true'
         run: |
           cd ${{ env.SOURCE_DIR }}
           zip -r ../${{ env.PLUGIN_NAME }}-${{ env.VERSION }}.zip .
+          echo "✅ Success: ZIP file created: ${{ env.PLUGIN_NAME }}-${{ env.VERSION }}.zip"
 
       - name: Get recent commit messages since last release
         if: env.CREATE_RELEASE == 'true'
         run: |
           if [ -n "$LATEST_TAG" ]; then
             COMMIT_MESSAGES=$(git log $LATEST_TAG..HEAD --oneline | sed 's/^/- /')
+            echo "ℹ️ Info: Commit messages since '$LATEST_TAG':"
+            echo "$COMMIT_MESSAGES"
           else
             COMMIT_MESSAGES="- Initial Release"
+            echo "ℹ️ Info: This is the first release"
           fi
           echo "COMMIT_MESSAGES<<EOF" >> $GITHUB_ENV
           echo "$COMMIT_MESSAGES" >> $GITHUB_ENV
