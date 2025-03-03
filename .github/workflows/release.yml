@@ -1,12 +1,10 @@
 name: Release CS2 Plugin
 
-# Cambiamos el trigger de 'workflow_dispatch' a 'push', filtrando por cambios en '**/core.lua'
 on:
   push:
     paths:
       - '**/core.lua'
 
-# Definimos variables de entorno globales
 env:
   SOURCE_DIR: ./src
   INSTALL_PATH: /game/csgo/addons/swiftly/
@@ -15,16 +13,14 @@ jobs:
   generate-release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Necesario para crear releases
+      contents: write
 
     steps:
-      # Checkout del código con historial completo para manejar tags
       - name: Checkout code
         uses: actions/checkout@v4.2.2
         with:
           fetch-depth: 0
 
-      # Establecemos PLUGIN_NAME dinámicamente desde el nombre del repositorio
       - name: Set PLUGIN_NAME
         run: |
           REPO_NAME=${{ github.event.repository.name }}
@@ -35,39 +31,63 @@ jobs:
           fi
           echo "PLUGIN_NAME=$PLUGIN_NAME" >> $GITHUB_ENV
 
-      # Extraemos la versión de core.lua y decidimos si crear un release
       - name: Check version and set variables
         run: |
-          # Extraemos la versión del return en GetPluginVersion(), quitando el 'v'
-          NEW_VERSION=$(grep 'return "v[0-9]\+\.[0-9]\+\.[0-9]\+"' **/core.lua | sed 's/.*"v\([0-9]\+\.[0-9]\+\.[0-9]\+\)".*/\1/')
-          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-
+          # Buscamos core.lua recursivamente desde la raíz
+          CORE_FILE=$(find . -type f -name "core.lua" | head -n 1)
+          
+          # Si no se encuentra core.lua, no creamos release
+          if [ -z "$CORE_FILE" ]; then
+            echo "Warning: No se encontró core.lua en el repositorio, no se creará release"
+            echo "CREATE_RELEASE=false" >> $GITHUB_ENV
+            exit 0
+          fi
+          
+          # Extraemos cualquier cosa entre comillas después de 'return'
+          NEW_VERSION=$(grep 'return "[^"]*"' "$CORE_FILE" | sed 's/.*return "\([^"]*\)".*/\1/' | head -n 1)
+          
+          # Si no se encuentra una versión válida, no creamos release
+          if [ -z "$NEW_VERSION" ]; then
+            echo "Warning: No se encontró una versión válida en $CORE_FILE, no se creará release"
+            echo "CREATE_RELEASE=false" >> $GITHUB_ENV
+            exit 0
+          fi
+          
+          # Guardamos la versión tal cual para nombres de archivos
+          echo "VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          
+          # Normalizamos para el tag añadiendo 'v' si no la tiene
+          if [[ "$NEW_VERSION" =~ ^v ]]; then
+            TAG_VERSION="$NEW_VERSION"
+          else
+            TAG_VERSION="v$NEW_VERSION"
+          fi
+          echo "TAG_VERSION=$TAG_VERSION" >> $GITHUB_ENV
+          
           # Obtenemos el último tag
           LATEST_TAG=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "")
           echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
-
-          # Extraemos la versión del último tag, sin 'v'
+          
+          # Extraemos la versión del último tag, sin 'v' para comparación
           if [ -n "$LATEST_TAG" ]; then
             LATEST_VERSION=${LATEST_TAG#v}
           else
             LATEST_VERSION=""
           fi
-
-          # Decidimos si crear el release: si no hay tag previo o si la versión cambió
+          
+          # Decidimos si crear el release comparando la versión sin 'v'
           if [ -z "$LATEST_VERSION" ] || [ "$LATEST_VERSION" != "$NEW_VERSION" ]; then
             echo "CREATE_RELEASE=true" >> $GITHUB_ENV
           else
             echo "CREATE_RELEASE=false" >> $GITHUB_ENV
           fi
 
-      # Creamos el archivo ZIP solo si se va a crear un release
       - name: Create ZIP file
         if: env.CREATE_RELEASE == 'true'
         run: |
           cd ${{ env.SOURCE_DIR }}
-          zip -r ../${{ env.PLUGIN_NAME }}-${{ env.NEW_VERSION }}.zip .
+          zip -r ../${{ env.PLUGIN_NAME }}-${{ env.VERSION }}.zip .
 
-      # Obtenemos los mensajes de commit desde el último release
       - name: Get recent commit messages since last release
         if: env.CREATE_RELEASE == 'true'
         run: |
@@ -80,19 +100,18 @@ jobs:
           echo "$COMMIT_MESSAGES" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
-      # Creamos el release solo si la versión cambió o es el primero
       - name: Release
         if: env.CREATE_RELEASE == 'true'
         uses: softprops/action-gh-release@v2.2.1
         with:
-          tag_name: v${{ env.NEW_VERSION }}
-          name: v${{ env.NEW_VERSION }}
+          tag_name: ${{ env.TAG_VERSION }}
+          name: ${{ env.TAG_VERSION }}
           body: |
             **Changes:**
             ${{ env.COMMIT_MESSAGES }}
 
             **How to download ⬇️**
-            Click the file below named <code>${{ env.PLUGIN_NAME }}-${{ env.NEW_VERSION }}.zip</code> in the assets section to start the download automatically.
+            Click the file below named <code>${{ env.PLUGIN_NAME }}-${{ env.VERSION }}.zip</code> in the assets section to start the download automatically.
 
             **How to install 📦**
             Extract the compressed file and place the folder(s) in `${{ env.INSTALL_PATH }}`
@@ -102,4 +121,4 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            ./${{ env.PLUGIN_NAME }}-${{ env.NEW_VERSION }}.zip
+            ./${{ env.PLUGIN_NAME }}-${{ env.VERSION }}.zip
