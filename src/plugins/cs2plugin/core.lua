@@ -1,5 +1,5 @@
 function GetPluginAuthor()
-	return "criskkky"
+	return "criskkky test"
 end
 
 function GetPluginVersion()
