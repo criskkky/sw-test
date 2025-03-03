@@ -43,18 +43,28 @@ jobs:
             exit 0
           fi
           
-          # Extraemos cualquier cosa entre comillas después de 'return'
-          NEW_VERSION=$(grep 'return "[^"]*"' "$CORE_FILE" | sed 's/.*return "\([^"]*\)".*/\1/' | head -n 1)
+          # Verificamos si el diff afecta GetPluginVersion()
+          CHANGED_IN_FUNCTION=$(git diff HEAD^ HEAD "$CORE_FILE" | grep -A 10 'function GetPluginVersion()' | grep -E '^\+.*return "[^"]*"')
           
-          # Si no se encuentra una versión válida, no creamos release
-          if [ -z "$NEW_VERSION" ]; then
-            echo "Warning: No se encontró una versión válida en $CORE_FILE, no se creará release"
+          if [ -z "$CHANGED_IN_FUNCTION" ]; then
+            echo "Warning: No se detectaron cambios en GetPluginVersion() en $CORE_FILE, no se creará release"
             echo "CREATE_RELEASE=false" >> $GITHUB_ENV
             exit 0
           fi
           
-          # Guardamos la versión tal cual para nombres de archivos
-          echo "VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          # Extraemos la versión de GetPluginVersion()
+          NEW_VERSION=$(grep -A 10 'function GetPluginVersion()' "$CORE_FILE" | grep 'return "[^"]*"' | sed 's/.*return "\([^"]*\)".*/\1/' | head -n 1)
+          
+          # Si no se encuentra una versión válida, no creamos release
+          if [ -z "$NEW_VERSION" ]; then
+            echo "Warning: No se encontró una versión válida en GetPluginVersion() en $CORE_FILE, no se creará release"
+            echo "CREATE_RELEASE=false" >> $GITHUB_ENV
+            exit 0
+          fi
+          
+          # Limpiamos la versión para nombres de archivos (sin espacios, caracteres especiales limitados)
+          VERSION=$(echo "$NEW_VERSION" | sed 's/[^a-zA-Z0-9._-]/-/g')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
           
           # Normalizamos para el tag añadiendo 'v' si no la tiene
           if [[ "$NEW_VERSION" =~ ^v ]]; then
@@ -62,6 +72,8 @@ jobs:
           else
             TAG_VERSION="v$NEW_VERSION"
           fi
+          # Limpiamos el tag para que sea válido en GitHub
+          TAG_VERSION=$(echo "$TAG_VERSION" | sed 's/[^a-zA-Z0-9._-]/-/g')
           echo "TAG_VERSION=$TAG_VERSION" >> $GITHUB_ENV
           
           # Obtenemos el último tag
@@ -76,7 +88,7 @@ jobs:
           fi
           
           # Decidimos si crear el release comparando la versión sin 'v'
-          if [ -z "$LATEST_VERSION" ] || [ "$LATEST_VERSION" != "$NEW_VERSION" ]; then
+          if [ -z "$LATEST_VERSION" ] || [ "$LATEST_VERSION" != "$VERSION" ]; then
             echo "CREATE_RELEASE=true" >> $GITHUB_ENV
           else
             echo "CREATE_RELEASE=false" >> $GITHUB_ENV
