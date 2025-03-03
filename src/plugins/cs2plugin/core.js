@@ -7,7 +7,7 @@ function GetPluginVersion() {
 }
 
 function GetPluginName() {
-    return "Brand New Lua Pluginz"
+    return "Brand New Lua Plugin"
 }
 
 function GetPluginWebsite() {
