@@ -61,6 +61,14 @@ jobs:
             echo "CREATE_RELEASE=false" >> $GITHUB_ENV
             exit 0
           fi
+
+          # Obtenemos todos los releases y si la versión ya existe, no creamos release
+          RELEASES=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases" | jq -r '.[] | .tag_name')
+          if echo "$RELEASES" | grep -q "^$NEW_VERSION$"; then
+            echo "Warning: La versión $NEW_VERSION ya existe, no se creará release"
+            echo "CREATE_RELEASE=false" >> $GITHUB_ENV
+            exit 0
+          fi
           
           # Limpiamos la versión para nombres de archivos (sin espacios, caracteres especiales limitados)
           VERSION=$(echo "$NEW_VERSION" | sed 's/[^a-zA-Z0-9._-]/-/g')
