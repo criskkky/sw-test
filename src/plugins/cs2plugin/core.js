@@ -3,7 +3,7 @@ function GetPluginAuthor() {
 }
 
 function GetPluginVersion() {
-    return "1.0.0"
+    return "1.0.1"
 }
 
 function GetPluginName() {
