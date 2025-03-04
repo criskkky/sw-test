@@ -7,7 +7,7 @@ on:
     paths:
       - '**/core.lua'
       - '**/core.js'
-      - '**/core.ts'
+      # - '**/core.ts' # Commented to avoid release without compiling
 
 env:
   SOURCE_DIR: ./src
@@ -38,12 +38,13 @@ jobs:
           
           # Search for core.lua recursively from the root
           CORE_FILE=$(find . -type f \( -name "core.lua" -o -name "core.js" -o -name "core.ts" \) | head -n 1 || true)
+
           if [ -z "$CORE_FILE" ]; then
-            echo "ℹ️ Skipping: No 'core.lua' file found in the repository."
+            echo "ℹ️ Skipping: No 'core' file found in the repository."
             echo "CREATE_RELEASE=false" >> $GITHUB_ENV
             exit 0
           fi
-          echo "✅ Found: 'core.lua' file located at $CORE_FILE"
+          echo "✅ Found: '$(basename "$CORE_FILE")' file located at $CORE_FILE"
 
           # Check if the diff affects GetPluginVersion()
           
